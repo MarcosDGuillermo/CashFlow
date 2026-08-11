@@ -149,6 +149,22 @@
   .type-toggle button.active[data-tipo="Gasto"]{background:rgba(193,82,61,.15);color:var(--gasto);border-color:var(--gasto);}
   .modal-actions{display:flex;justify-content:space-between;gap:8px;margin-top:16px;}
 
+  .tabs{
+    display:flex;gap:6px;margin-bottom:22px;border-bottom:1px solid var(--border);
+  }
+  .tab-btn{
+    background:none;border:none;color:var(--muted);font-family:inherit;font-size:13px;
+    padding:10px 4px;margin-right:18px;cursor:pointer;border-bottom:2px solid transparent;
+  }
+  .tab-btn.active{color:var(--text);border-bottom-color:var(--stamp);}
+  .tab-badge{
+    background:var(--gasto);color:#fff;font-size:10px;border-radius:10px;padding:1px 7px;margin-left:4px;
+  }
+  .check-inline{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);}
+  .check-inline input{width:auto;padding:0;}
+  .tag.pagado{color:var(--ingreso);border-color:var(--ingreso);}
+  .tag.pendiente{color:var(--stamp);border-color:var(--stamp);}
+
   .config-note{
     background:var(--surface);border:1px dashed var(--border);border-radius:var(--radius);
     padding:16px;font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.5;
@@ -185,6 +201,13 @@
     <code>WEBAPP_URL</code> dentro de este archivo HTML.
   </div>
 
+  <nav class="tabs">
+    <button class="tab-btn active" data-view="movimientos">Movimientos</button>
+    <button class="tab-btn" data-view="vencimientos">Vencimientos <span class="tab-badge" id="badgeVenc"></span></button>
+    <button class="tab-btn" data-view="tarjetas">Tarjetas</button>
+  </nav>
+
+  <section id="viewMovimientos">
   <div class="cards">
     <div class="card ok"><div class="k">Ingresos (filtro)</div><div class="v" id="cardIngresos">—</div></div>
     <div class="card bad"><div class="k">Gastos (filtro)</div><div class="v" id="cardGastos">—</div></div>
@@ -215,6 +238,37 @@
     <tbody id="tbody"></tbody>
   </table>
   <div class="empty" id="emptyState" style="display:none;">No hay movimientos para este filtro.</div>
+  </section>
+
+  <section id="viewVencimientos" style="display:none;">
+    <div class="toolbar">
+      <label class="check-inline"><input type="checkbox" id="fSoloPendientes" checked> Solo pendientes</label>
+      <div class="spacer"></div>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Vence</th><th>Concepto</th><th>Categoría</th><th>Cuenta</th><th style="text-align:right;">Monto est.</th><th>Estado</th><th></th></tr>
+      </thead>
+      <tbody id="tbodyVenc"></tbody>
+    </table>
+    <div class="empty" id="emptyVenc" style="display:none;">No hay vencimientos para mostrar.</div>
+  </section>
+
+  <section id="viewTarjetas" style="display:none;">
+    <div class="cuentas-strip" id="tarjetasResumen"></div>
+    <div class="toolbar">
+      <select id="fTarjeta"><option value="">Todas las tarjetas</option></select>
+      <label class="check-inline"><input type="checkbox" id="fSoloPendientesCuotas" checked> Solo pendientes</label>
+      <div class="spacer"></div>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Vence</th><th>Tarjeta</th><th>Concepto</th><th>Cuota</th><th style="text-align:right;">Importe</th><th>Estado</th></tr>
+      </thead>
+      <tbody id="tbodyTarjetas"></tbody>
+    </table>
+    <div class="empty" id="emptyTarjetas" style="display:none;">No hay cuotas para mostrar.</div>
+  </section>
 
 </div>
 
@@ -267,6 +321,9 @@ let META = { categorias: [], cuentas: [] };
 let SORT_DESC = true;
 let EDIT_ID = null;
 let TIPO_ACTUAL = 'Gasto';
+let VENCIMIENTOS = [];
+let CUOTAS = [];
+let CURRENT_VIEW = 'movimientos';
 
 function fmtMoney(n){
   return '$ ' + Number(n||0).toLocaleString('es-AR', {minimumFractionDigits:0, maximumFractionDigits:0});
@@ -285,12 +342,99 @@ async function cargarTodo(){
     document.getElementById('configNote').style.display = 'block';
     return;
   }
-  const [movs, meta] = await Promise.all([api('list'), api('meta')]);
+  const [movs, meta, venc, tarj] = await Promise.all([api('list'), api('meta'), api('vencimientos'), api('tarjetas')]);
   ALL_ITEMS = movs.items || [];
   META = meta;
+  VENCIMIENTOS = venc.items || [];
+  CUOTAS = tarj.items || [];
   poblarFiltros();
   poblarFormSelects();
+  poblarFiltroTarjetas();
   render();
+  renderVencimientos();
+  renderTarjetas();
+}
+
+function poblarFiltroTarjetas(){
+  const tarjetas = [...new Set(CUOTAS.map(c => c.tarjeta).filter(Boolean))].sort();
+  const sel = document.getElementById('fTarjeta');
+  sel.innerHTML = '<option value="">Todas las tarjetas</option>';
+  tarjetas.forEach(t => sel.insertAdjacentHTML('beforeend', `<option value="${t}">${t}</option>`));
+}
+
+function cambiarVista(view){
+  CURRENT_VIEW = view;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  document.getElementById('viewMovimientos').style.display = view === 'movimientos' ? '' : 'none';
+  document.getElementById('viewVencimientos').style.display = view === 'vencimientos' ? '' : 'none';
+  document.getElementById('viewTarjetas').style.display = view === 'tarjetas' ? '' : 'none';
+}
+
+function renderVencimientos(){
+  const soloPend = document.getElementById('fSoloPendientes').checked;
+  let items = VENCIMIENTOS.filter(v => !soloPend || v.estado !== 'Pagado');
+  const tbody = document.getElementById('tbodyVenc');
+  tbody.innerHTML = '';
+  document.getElementById('emptyVenc').style.display = items.length ? 'none' : 'block';
+  const pendientes = VENCIMIENTOS.filter(v => v.estado !== 'Pagado');
+  document.getElementById('badgeVenc').textContent = pendientes.length || '';
+
+  items.forEach(v => {
+    const tr = document.createElement('tr');
+    const esPagado = v.estado === 'Pagado';
+    tr.innerHTML = `
+      <td class="fecha" data-label="Vence">${v.fechaVencimiento}</td>
+      <td data-label="Concepto">${v.concepto}</td>
+      <td data-label="Categoría">${v.categoria}</td>
+      <td data-label="Cuenta">${v.cuenta}</td>
+      <td class="monto gasto" data-label="Monto est.">${fmtMoney(v.montoEstimado)}</td>
+      <td data-label="Estado"><span class="tag ${esPagado ? 'pagado':'pendiente'}">${v.estado}</span></td>
+      <td class="acciones" data-label="">
+        ${esPagado ? '' : `<button class="icon-btn" onclick="marcarPagado('${v.id}')" title="Marcar pagado">✓</button>`}
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+window.marcarPagado = async function(id){
+  if (!confirm('¿Marcar como pagado? Esto va a generar el movimiento correspondiente en Movimientos.')) return;
+  await api('marcarVencimientoPagado', {id});
+  await cargarTodo();
+}
+
+function renderTarjetas(){
+  const tarjetaSel = document.getElementById('fTarjeta').value;
+  const soloPend = document.getElementById('fSoloPendientesCuotas').checked;
+  let items = CUOTAS.filter(c => {
+    if (tarjetaSel && c.tarjeta !== tarjetaSel) return false;
+    if (soloPend && c.estado !== 'Pendiente') return false;
+    return true;
+  });
+  const tbody = document.getElementById('tbodyTarjetas');
+  tbody.innerHTML = '';
+  document.getElementById('emptyTarjetas').style.display = items.length ? 'none' : 'block';
+  items.forEach(c => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="fecha" data-label="Vence">${c.fechaVencimiento}</td>
+      <td data-label="Tarjeta">${c.tarjeta}</td>
+      <td data-label="Concepto">${c.concepto}</td>
+      <td data-label="Cuota">${c.nCuota}/${c.totalCuotas}</td>
+      <td class="monto gasto" data-label="Importe">${fmtMoney(c.importeCuota)}</td>
+      <td data-label="Estado"><span class="tag ${c.estado === 'Pagado' ? 'pagado':'pendiente'}">${c.estado}</span></td>`;
+    tbody.appendChild(tr);
+  });
+
+  // resumen: total pendiente por tarjeta (todas las cuotas pendientes, no solo el filtro de tabla)
+  const porTarjeta = {};
+  CUOTAS.filter(c => c.estado === 'Pendiente').forEach(c => {
+    porTarjeta[c.tarjeta] = (porTarjeta[c.tarjeta] || 0) + c.importeCuota;
+  });
+  const strip = document.getElementById('tarjetasResumen');
+  strip.innerHTML = '';
+  Object.entries(porTarjeta).sort((a,b) => b[1]-a[1]).forEach(([tarjeta, total]) => {
+    strip.insertAdjacentHTML('beforeend', `<div class="cuenta-chip">${tarjeta} (pendiente)<b>${fmtMoney(total)}</b></div>`);
+  });
 }
 
 function poblarFiltros(){
@@ -455,6 +599,13 @@ document.getElementById('btnOrden').addEventListener('click', () => {
   document.getElementById('btnOrden').textContent = 'Fecha ' + (SORT_DESC ? '↓' : '↑');
   render();
 });
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => cambiarVista(btn.dataset.view));
+});
+document.getElementById('fSoloPendientes').addEventListener('change', renderVencimientos);
+document.getElementById('fTarjeta').addEventListener('change', renderTarjetas);
+document.getElementById('fSoloPendientesCuotas').addEventListener('change', renderTarjetas);
 
 cargarTodo();
 </script>
