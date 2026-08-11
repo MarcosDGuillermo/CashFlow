@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cash Flow — Registro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#10141A;
+    --surface:#171C24;
+    --surface-2:#1D232C;
+    --border:#28303B;
+    --text:#E9ECF0;
+    --muted:#8A93A3;
+    --ingreso:#4FB286;
+    --gasto:#C1523D;
+    --stamp:#E0AE4A;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter', sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:28px 20px 80px;}
+
+  header.top{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    gap:16px;flex-wrap:wrap;margin-bottom:28px;
+    border-bottom:1px solid var(--border);
+    padding-bottom:20px;
+  }
+  header.top h1{
+    font-family:'Fraunces', serif;
+    font-weight:600;
+    font-size:32px;
+    margin:0;
+    letter-spacing:-0.01em;
+  }
+  header.top .sub{color:var(--muted);font-size:13px;margin-top:4px;}
+
+  .stamp-balance{
+    text-align:right;
+    position:relative;
+  }
+  .stamp-balance .label{
+    font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--stamp);
+    border:1px solid var(--stamp);border-radius:3px;padding:2px 8px;display:inline-block;
+    transform:rotate(-3deg);margin-bottom:6px;
+  }
+  .stamp-balance .value{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:30px;font-weight:600;
+  }
+
+  .cards{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+    gap:12px;margin-bottom:24px;
+  }
+  .card{
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:14px 16px;
+  }
+  .card .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
+  .card .v{font-family:'IBM Plex Mono', monospace;font-size:19px;margin-top:6px;}
+  .card.ok .v{color:var(--ingreso);}
+  .card.bad .v{color:var(--gasto);}
+
+  .cuentas-strip{
+    display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;margin-bottom:24px;
+  }
+  .cuenta-chip{
+    flex:0 0 auto;background:var(--surface-2);border:1px solid var(--border);
+    border-radius:20px;padding:6px 14px;font-size:12px;color:var(--muted);white-space:nowrap;
+  }
+  .cuenta-chip b{color:var(--text);font-family:'IBM Plex Mono',monospace;font-weight:500;margin-left:6px;}
+
+  .toolbar{
+    display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;
+  }
+  select, input{
+    background:var(--surface);border:1px solid var(--border);color:var(--text);
+    border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;
+  }
+  select:focus, input:focus{outline:1px solid var(--stamp);}
+  .btn{
+    background:var(--stamp);color:#1A1300;border:none;border-radius:8px;
+    padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer;font-family:inherit;
+  }
+  .btn:hover{filter:brightness(1.08);}
+  .btn.ghost{
+    background:transparent;border:1px solid var(--border);color:var(--text);
+  }
+  .spacer{flex:1;}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  thead th{
+    text-align:left;color:var(--muted);font-weight:500;font-size:11px;
+    text-transform:uppercase;letter-spacing:.06em;
+    padding:8px 10px;border-bottom:1px solid var(--border);
+  }
+  tbody td{
+    padding:10px;border-bottom:1px solid var(--border);vertical-align:middle;
+  }
+  tbody tr:hover{background:var(--surface);}
+  td.fecha{font-family:'IBM Plex Mono',monospace;color:var(--muted);white-space:nowrap;}
+  td.monto{font-family:'IBM Plex Mono',monospace;text-align:right;white-space:nowrap;}
+  td.monto.ingreso{color:var(--ingreso);}
+  td.monto.gasto{color:var(--gasto);}
+  td.acciones{text-align:right;white-space:nowrap;}
+  .tag{
+    display:inline-block;font-size:11px;padding:2px 8px;border-radius:12px;
+    background:var(--surface-2);color:var(--muted);border:1px solid var(--border);
+  }
+  .icon-btn{
+    background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:4px 6px;
+  }
+  .icon-btn:hover{color:var(--text);}
+
+  .empty{
+    text-align:center;color:var(--muted);padding:50px 0;font-size:14px;
+  }
+
+  /* Modal */
+  .modal-bg{
+    position:fixed;inset:0;background:rgba(6,8,11,.6);display:none;
+    align-items:center;justify-content:center;padding:16px;z-index:10;
+  }
+  .modal-bg.open{display:flex;}
+  .modal{
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:22px;width:100%;max-width:420px;
+  }
+  .modal h2{font-family:'Fraunces',serif;font-weight:600;font-size:20px;margin:0 0 16px;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;}
+  .field select, .field input{width:100%;}
+  .type-toggle{display:flex;gap:8px;margin-bottom:12px;}
+  .type-toggle button{
+    flex:1;padding:9px;border-radius:8px;border:1px solid var(--border);
+    background:var(--surface-2);color:var(--muted);font-family:inherit;font-size:13px;cursor:pointer;
+  }
+  .type-toggle button.active[data-tipo="Ingreso"]{background:rgba(79,178,134,.15);color:var(--ingreso);border-color:var(--ingreso);}
+  .type-toggle button.active[data-tipo="Gasto"]{background:rgba(193,82,61,.15);color:var(--gasto);border-color:var(--gasto);}
+  .modal-actions{display:flex;justify-content:space-between;gap:8px;margin-top:16px;}
+
+  .config-note{
+    background:var(--surface);border:1px dashed var(--border);border-radius:var(--radius);
+    padding:16px;font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.5;
+  }
+  .config-note code{color:var(--stamp);}
+
+  @media (max-width:640px){
+    thead{display:none;}
+    table, tbody, tr, td{display:block;width:100%;}
+    tbody tr{border:1px solid var(--border);border-radius:8px;margin-bottom:10px;padding:8px 4px;}
+    tbody td{border:none;display:flex;justify-content:space-between;padding:4px 10px;}
+    tbody td:before{content:attr(data-label);color:var(--muted);font-size:11px;text-transform:uppercase;}
+    td.monto{justify-content:space-between;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>Cash Flow</h1>
+      <div class="sub" id="periodoLabel">Registro personal de ingresos y gastos</div>
+    </div>
+    <div class="stamp-balance">
+      <div class="label">Saldo total</div>
+      <div class="value" id="saldoTotal">—</div>
+    </div>
+  </header>
+
+  <div id="configNote" class="config-note" style="display:none;">
+    Falta conectar la app con tu planilla. Pegá la URL de tu Web App de Apps Script
+    (Extensiones → Apps Script → Implementar → Nueva implementación) en la constante
+    <code>WEBAPP_URL</code> dentro de este archivo HTML.
+  </div>
+
+  <div class="cards">
+    <div class="card ok"><div class="k">Ingresos (filtro)</div><div class="v" id="cardIngresos">—</div></div>
+    <div class="card bad"><div class="k">Gastos (filtro)</div><div class="v" id="cardGastos">—</div></div>
+    <div class="card"><div class="k">Balance (filtro)</div><div class="v" id="cardBalance">—</div></div>
+    <div class="card"><div class="k">Movimientos</div><div class="v" id="cardCantidad">—</div></div>
+  </div>
+
+  <div class="cuentas-strip" id="cuentasStrip"></div>
+
+  <div class="toolbar">
+    <select id="fMes">
+      <option value="">Todos los meses</option>
+    </select>
+    <select id="fCategoria"><option value="">Todas las categorías</option></select>
+    <select id="fCuenta"><option value="">Todas las cuentas</option></select>
+    <input type="text" id="fBuscar" placeholder="Buscar descripción…">
+    <div class="spacer"></div>
+    <button class="btn ghost" id="btnOrden">Fecha ↓</button>
+    <button class="btn" id="btnNuevo">+ Movimiento</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Cuenta</th><th>Descripción</th><th style="text-align:right;">Monto</th><th></th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <div class="empty" id="emptyState" style="display:none;">No hay movimientos para este filtro.</div>
+
+</div>
+
+<!-- Modal alta/edición -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h2 id="modalTitle">Nuevo movimiento</h2>
+    <div class="type-toggle">
+      <button type="button" data-tipo="Ingreso" id="tipoIngreso">Ingreso</button>
+      <button type="button" data-tipo="Gasto" id="tipoGasto">Gasto</button>
+    </div>
+    <div class="field">
+      <label>Fecha</label>
+      <input type="date" id="fFecha">
+    </div>
+    <div class="field">
+      <label>Categoría</label>
+      <select id="fFormCategoria"></select>
+    </div>
+    <div class="field">
+      <label>Cuenta</label>
+      <select id="fFormCuenta"></select>
+    </div>
+    <div class="field">
+      <label>Monto</label>
+      <input type="number" id="fMonto" step="0.01" placeholder="0.00">
+    </div>
+    <div class="field">
+      <label>Descripción</label>
+      <input type="text" id="fDescripcion" placeholder="Ej: Despensa barrio">
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="btnEliminar" style="display:none;color:var(--gasto);border-color:var(--gasto);">Eliminar</button>
+      <div class="spacer"></div>
+      <button class="btn ghost" id="btnCancelar">Cancelar</button>
+      <button class="btn" id="btnGuardar">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==== CONFIGURACIÓN ====
+// Pegá acá la URL de tu Web App de Apps Script una vez desplegada (ver Code.gs)
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyh9CgCwgOH7ZpufLOocMeVZWNoCromaPKA0Wfspo8anRjoPqHw3ffpXvIoqXyzrP8VYw/exec'; // ej: 'https://script.google.com/macros/s/AKfycb.../exec'
+
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+let ALL_ITEMS = [];
+let META = { categorias: [], cuentas: [] };
+let SORT_DESC = true;
+let EDIT_ID = null;
+let TIPO_ACTUAL = 'Gasto';
+
+function fmtMoney(n){
+  return '$ ' + Number(n||0).toLocaleString('es-AR', {minimumFractionDigits:0, maximumFractionDigits:0});
+}
+
+async function api(action, params){
+  const url = new URL(WEBAPP_URL);
+  url.searchParams.set('action', action);
+  Object.entries(params||{}).forEach(([k,v]) => url.searchParams.set(k, v));
+  const res = await fetch(url.toString());
+  return res.json();
+}
+
+async function cargarTodo(){
+  if (!WEBAPP_URL){
+    document.getElementById('configNote').style.display = 'block';
+    return;
+  }
+  const [movs, meta] = await Promise.all([api('list'), api('meta')]);
+  ALL_ITEMS = movs.items || [];
+  META = meta;
+  poblarFiltros();
+  poblarFormSelects();
+  render();
+}
+
+function poblarFiltros(){
+  const cats = [...new Set(ALL_ITEMS.map(i => i.categoria).filter(Boolean))].sort();
+  const cuentas = [...new Set(ALL_ITEMS.map(i => i.cuenta).filter(Boolean))].sort();
+  const fCat = document.getElementById('fCategoria');
+  cats.forEach(c => fCat.insertAdjacentHTML('beforeend', `<option value="${c}">${c}</option>`));
+  const fCue = document.getElementById('fCuenta');
+  cuentas.forEach(c => fCue.insertAdjacentHTML('beforeend', `<option value="${c}">${c}</option>`));
+  const fMes = document.getElementById('fMes');
+  MESES.forEach((m,idx) => fMes.insertAdjacentHTML('beforeend', `<option value="${idx+1}">${m}</option>`));
+}
+
+function poblarFormSelects(){
+  const catSel = document.getElementById('fFormCategoria');
+  const cueSel = document.getElementById('fFormCuenta');
+  catSel.innerHTML = '';
+  cueSel.innerHTML = '';
+  META.categorias
+    .filter(c => c.tipo === TIPO_ACTUAL || !c.tipo)
+    .forEach(c => catSel.insertAdjacentHTML('beforeend', `<option value="${c.categoria}">${c.categoria}</option>`));
+  META.cuentas.forEach(c => cueSel.insertAdjacentHTML('beforeend', `<option value="${c.cuenta}">${c.cuenta}</option>`));
+}
+
+function filtrados(){
+  const mes = document.getElementById('fMes').value;
+  const cat = document.getElementById('fCategoria').value;
+  const cue = document.getElementById('fCuenta').value;
+  const q = document.getElementById('fBuscar').value.trim().toLowerCase();
+  let items = ALL_ITEMS.filter(i => {
+    if (mes && String(i.mesNum) !== mes) return false;
+    if (cat && i.categoria !== cat) return false;
+    if (cue && i.cuenta !== cue) return false;
+    if (q && !i.descripcion.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  items.sort((a,b) => SORT_DESC ? (a.fechaISO < b.fechaISO ? 1 : -1) : (a.fechaISO > b.fechaISO ? 1 : -1));
+  return items;
+}
+
+function render(){
+  const items = filtrados();
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  document.getElementById('emptyState').style.display = items.length ? 'none' : 'block';
+
+  let ingresos = 0, gastos = 0;
+  items.forEach(i => {
+    if (i.tipo === 'Ingreso') ingresos += i.monto;
+    else if (i.tipo === 'Gasto') gastos += i.monto;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="fecha" data-label="Fecha">${i.fecha}</td>
+      <td data-label="Tipo"><span class="tag">${i.tipo}</span></td>
+      <td data-label="Categoría">${i.categoria}</td>
+      <td data-label="Cuenta">${i.cuenta}</td>
+      <td data-label="Descripción">${i.descripcion}</td>
+      <td class="monto ${i.tipo === 'Ingreso' ? 'ingreso' : 'gasto'}" data-label="Monto">${i.tipo === 'Gasto' ? '-' : ''}${fmtMoney(i.monto)}</td>
+      <td class="acciones" data-label="">
+        <button class="icon-btn" onclick="abrirEdicion('${i.id}')">✎</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('cardIngresos').textContent = fmtMoney(ingresos);
+  document.getElementById('cardGastos').textContent = fmtMoney(gastos);
+  document.getElementById('cardBalance').textContent = fmtMoney(ingresos - gastos);
+  document.getElementById('cardCantidad').textContent = items.length;
+
+  // saldo total y por cuenta (sobre TODOS los movimientos, no el filtro)
+  const porCuenta = {};
+  let saldoTotal = 0;
+  ALL_ITEMS.forEach(i => {
+    const signo = i.tipo === 'Ingreso' ? 1 : -1;
+    porCuenta[i.cuenta] = (porCuenta[i.cuenta] || 0) + signo * i.monto;
+    saldoTotal += signo * i.monto;
+  });
+  document.getElementById('saldoTotal').textContent = fmtMoney(saldoTotal);
+  const strip = document.getElementById('cuentasStrip');
+  strip.innerHTML = '';
+  Object.entries(porCuenta).sort((a,b) => b[1]-a[1]).forEach(([cuenta, saldo]) => {
+    strip.insertAdjacentHTML('beforeend', `<div class="cuenta-chip">${cuenta}<b>${fmtMoney(saldo)}</b></div>`);
+  });
+}
+
+function setTipo(tipo){
+  TIPO_ACTUAL = tipo;
+  document.getElementById('tipoIngreso').classList.toggle('active', tipo === 'Ingreso');
+  document.getElementById('tipoGasto').classList.toggle('active', tipo === 'Gasto');
+  poblarFormSelects();
+}
+
+function abrirNuevo(){
+  EDIT_ID = null;
+  document.getElementById('modalTitle').textContent = 'Nuevo movimiento';
+  document.getElementById('btnEliminar').style.display = 'none';
+  document.getElementById('fFecha').value = new Date().toISOString().slice(0,10);
+  document.getElementById('fMonto').value = '';
+  document.getElementById('fDescripcion').value = '';
+  setTipo('Gasto');
+  document.getElementById('modalBg').classList.add('open');
+}
+
+window.abrirEdicion = function(id){
+  const item = ALL_ITEMS.find(i => i.id === id);
+  if (!item) return;
+  EDIT_ID = id;
+  document.getElementById('modalTitle').textContent = 'Editar movimiento';
+  document.getElementById('btnEliminar').style.display = 'inline-block';
+  document.getElementById('fFecha').value = item.fechaISO;
+  document.getElementById('fMonto').value = item.monto;
+  document.getElementById('fDescripcion').value = item.descripcion;
+  setTipo(item.tipo === 'Ingreso' ? 'Ingreso' : 'Gasto');
+  document.getElementById('fFormCategoria').value = item.categoria;
+  document.getElementById('fFormCuenta').value = item.cuenta;
+  document.getElementById('modalBg').classList.add('open');
+}
+
+function cerrarModal(){
+  document.getElementById('modalBg').classList.remove('open');
+}
+
+async function guardar(){
+  const payload = {
+    tipo: TIPO_ACTUAL,
+    fecha: document.getElementById('fFecha').value,
+    categoria: document.getElementById('fFormCategoria').value,
+    cuenta: document.getElementById('fFormCuenta').value,
+    monto: document.getElementById('fMonto').value,
+    descripcion: document.getElementById('fDescripcion').value
+  };
+  if (EDIT_ID){
+    await api('update', Object.assign({id: EDIT_ID}, payload));
+  } else {
+    await api('create', payload);
+  }
+  cerrarModal();
+  await cargarTodo();
+}
+
+async function eliminar(){
+  if (!EDIT_ID) return;
+  if (!confirm('¿Eliminar este movimiento?')) return;
+  await api('delete', {id: EDIT_ID});
+  cerrarModal();
+  await cargarTodo();
+}
+
+document.getElementById('btnNuevo').addEventListener('click', abrirNuevo);
+document.getElementById('btnCancelar').addEventListener('click', cerrarModal);
+document.getElementById('btnGuardar').addEventListener('click', guardar);
+document.getElementById('btnEliminar').addEventListener('click', eliminar);
+document.getElementById('tipoIngreso').addEventListener('click', () => setTipo('Ingreso'));
+document.getElementById('tipoGasto').addEventListener('click', () => setTipo('Gasto'));
+document.getElementById('modalBg').addEventListener('click', (e) => { if (e.target.id === 'modalBg') cerrarModal(); });
+
+['fMes','fCategoria','fCuenta','fBuscar'].forEach(id => {
+  document.getElementById(id).addEventListener('input', render);
+});
+document.getElementById('btnOrden').addEventListener('click', () => {
+  SORT_DESC = !SORT_DESC;
+  document.getElementById('btnOrden').textContent = 'Fecha ' + (SORT_DESC ? '↓' : '↑');
+  render();
+});
+
+cargarTodo();
+</script>
+</body>
+</html>
