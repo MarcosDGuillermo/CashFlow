@@ -569,8 +569,23 @@ async function actualizarVencimientos(){
 
 window.marcarPagado = async function(id){
   if (!confirm('¿Marcar como pagado? Esto va a generar el movimiento correspondiente en Movimientos.')) return;
-  await api('marcarVencimientoPagado', {id});
-  await refrescarMovimientosYVencimientos();
+
+  // Actualización optimista: mostramos el cambio ya mismo, sin esperar al servidor.
+  const v = VENCIMIENTOS.find(x => x.id === id);
+  const estadoAnterior = v ? v.estado : null;
+  if (v) v.estado = 'Pagado';
+  renderVencimientos();
+  renderResumen();
+
+  try {
+    await api('marcarVencimientoPagado', {id});
+    await refrescarMovimientosYVencimientos(); // trae el saldo real y el movimiento generado
+  } catch (err) {
+    // Si falló en el servidor, revertimos el estado optimista para no mentir en pantalla.
+    if (v) v.estado = estadoAnterior;
+    renderVencimientos();
+    renderResumen();
+  }
 }
 
 function renderTarjetas(){
