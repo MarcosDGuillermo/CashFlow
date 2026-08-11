@@ -402,7 +402,12 @@ async function api(action, params){
   url.searchParams.set('action', action);
   Object.entries(params||{}).forEach(([k,v]) => url.searchParams.set(k, v));
   const res = await fetch(url.toString());
-  return res.json();
+  const data = await res.json();
+  if (data && data.error){
+    alert('Error del servidor: ' + data.error);
+    throw new Error(data.error);
+  }
+  return data;
 }
 
 async function cargarTodo(){
@@ -533,10 +538,30 @@ function renderVencimientos(){
   });
 }
 
+// Refresca solo Movimientos + Vencimientos (usado cuando una acción de Vencimientos
+// genera un movimiento nuevo, ej. marcar pagado). Evita re-pedir meta/tarjetas de más.
+async function refrescarMovimientosYVencimientos(){
+  const [movs, venc] = await Promise.all([api('list'), api('vencimientos')]);
+  ALL_ITEMS = movs.items || [];
+  VENCIMIENTOS = venc.items || [];
+  render();
+  renderVencimientos();
+  renderResumen();
+}
+
+// Refresca solo Vencimientos (usado al editar/eliminar un vencimiento, que NO
+// genera movimientos nuevos, así que no hace falta re-pedir Movimientos).
+async function actualizarVencimientos(){
+  const venc = await api('vencimientos');
+  VENCIMIENTOS = venc.items || [];
+  renderVencimientos();
+  renderResumen();
+}
+
 window.marcarPagado = async function(id){
   if (!confirm('¿Marcar como pagado? Esto va a generar el movimiento correspondiente en Movimientos.')) return;
   await api('marcarVencimientoPagado', {id});
-  await cargarTodo();
+  await refrescarMovimientosYVencimientos();
 }
 
 function renderTarjetas(){
@@ -642,9 +667,18 @@ async function guardarVenc(){
     fechaVencimiento: document.getElementById('vFFecha').value,
     montoEstimado: document.getElementById('vFMonto').value
   };
-  await api('updateVencimiento', payload);
-  cerrarModalVenc();
-  await cargarTodo();
+  const btn = document.getElementById('btnGuardarVenc');
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Guardando…';
+  try {
+    await api('updateVencimiento', payload);
+    cerrarModalVenc();
+    await actualizarVencimientos();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  }
 }
 
 async function eliminarVenc(){
@@ -652,7 +686,7 @@ async function eliminarVenc(){
   if (!confirm('¿Eliminar este vencimiento?')) return;
   await api('deleteVencimiento', {id: EDIT_VENC_ID});
   cerrarModalVenc();
-  await cargarTodo();
+  await actualizarVencimientos();
 }
 
 function filtrados(){
