@@ -397,14 +397,16 @@ function fmtMoney(n){
   return '$ ' + Number(n||0).toLocaleString('es-AR', {minimumFractionDigits:0, maximumFractionDigits:0});
 }
 
-async function api(action, params){
+async function api(action, params, opts){
+  opts = opts || {};
   const url = new URL(WEBAPP_URL);
   url.searchParams.set('action', action);
   Object.entries(params||{}).forEach(([k,v]) => url.searchParams.set(k, v));
   const res = await fetch(url.toString());
   const data = await res.json();
   if (data && data.error){
-    alert('Error del servidor: ' + data.error);
+    if (opts.silent) console.warn('Error en acción "' + action + '": ' + data.error);
+    else alert('Error del servidor: ' + data.error);
     throw new Error(data.error);
   }
   return data;
@@ -415,11 +417,17 @@ async function cargarTodo(){
     document.getElementById('configNote').style.display = 'block';
     return;
   }
-  const [movs, meta, venc, tarj] = await Promise.all([api('list'), api('meta'), api('vencimientos'), api('tarjetas')]);
-  ALL_ITEMS = movs.items || [];
-  META = meta;
-  VENCIMIENTOS = venc.items || [];
-  CUOTAS = tarj.items || [];
+  const resultados = await Promise.allSettled([
+    api('list', null, {silent:true}),
+    api('meta', null, {silent:true}),
+    api('vencimientos', null, {silent:true}),
+    api('tarjetas', null, {silent:true})
+  ]);
+  const [movs, meta, venc, tarj] = resultados.map(r => r.status === 'fulfilled' ? r.value : null);
+  if (movs) ALL_ITEMS = movs.items || [];
+  if (meta) META = meta;
+  if (venc) VENCIMIENTOS = venc.items || [];
+  if (tarj) CUOTAS = tarj.items || [];
   poblarFiltros();
   poblarFormSelects();
   poblarFiltroTarjetas();
