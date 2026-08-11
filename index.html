@@ -165,6 +165,12 @@
   .tag.pagado{color:var(--ingreso);border-color:var(--ingreso);}
   .tag.pendiente{color:var(--stamp);border-color:var(--stamp);}
 
+  .section-title{
+    font-family:'Fraunces', serif;font-weight:600;font-size:16px;
+    margin:28px 0 12px;color:var(--text);
+  }
+  .section-title:first-of-type{margin-top:0;}
+
   .config-note{
     background:var(--surface);border:1px dashed var(--border);border-radius:var(--radius);
     padding:16px;font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.5;
@@ -202,12 +208,35 @@
   </div>
 
   <nav class="tabs">
-    <button class="tab-btn active" data-view="movimientos">Movimientos</button>
+    <button class="tab-btn active" data-view="resumen">Resumen</button>
+    <button class="tab-btn" data-view="movimientos">Movimientos</button>
     <button class="tab-btn" data-view="vencimientos">Vencimientos <span class="tab-badge" id="badgeVenc"></span></button>
     <button class="tab-btn" data-view="tarjetas">Tarjetas</button>
   </nav>
 
-  <section id="viewMovimientos">
+  <section id="viewResumen">
+    <div class="cards" id="resumenCardsPrincipales">
+      <div class="card"><div class="k">Saldo total</div><div class="v" id="resSaldoTotal">—</div></div>
+      <div class="card ok"><div class="k">Ingresos del mes</div><div class="v" id="resIngresosMes">—</div></div>
+      <div class="card bad"><div class="k">Gastos del mes</div><div class="v" id="resGastosMes">—</div></div>
+      <div class="card"><div class="k">Balance del mes</div><div class="v" id="resBalanceMes">—</div></div>
+    </div>
+
+    <h3 class="section-title">Próximos vencimientos</h3>
+    <table>
+      <thead>
+        <tr><th>Vence</th><th>Concepto</th><th>Cuenta</th><th style="text-align:right;">Monto est.</th><th></th></tr>
+      </thead>
+      <tbody id="tbodyResumenVenc"></tbody>
+    </table>
+    <div class="empty" id="emptyResumenVenc" style="display:none;">No hay vencimientos pendientes.</div>
+
+    <h3 class="section-title">Tarjetas</h3>
+    <div class="cards" id="resumenTarjetas"></div>
+    <div class="empty" id="emptyResumenTarjetas" style="display:none;">No hay consumos con tarjeta cargados.</div>
+  </section>
+
+  <section id="viewMovimientos" style="display:none;">
   <div class="cards">
     <div class="card ok"><div class="k">Ingresos (filtro)</div><div class="v" id="cardIngresos">—</div></div>
     <div class="card bad"><div class="k">Gastos (filtro)</div><div class="v" id="cardGastos">—</div></div>
@@ -309,6 +338,43 @@
   </div>
 </div>
 
+<!-- Modal edición de vencimiento -->
+<div class="modal-bg" id="modalBgVenc">
+  <div class="modal">
+    <h2>Editar vencimiento</h2>
+    <div class="type-toggle">
+      <button type="button" data-tipo="Ingreso" id="tipoVencIngreso">Ingreso</button>
+      <button type="button" data-tipo="Gasto" id="tipoVencGasto">Gasto</button>
+    </div>
+    <div class="field">
+      <label>Concepto</label>
+      <input type="text" id="vFConcepto" placeholder="Ej: Alquiler oficina">
+    </div>
+    <div class="field">
+      <label>Categoría</label>
+      <select id="vFCategoria"></select>
+    </div>
+    <div class="field">
+      <label>Cuenta</label>
+      <select id="vFCuenta"></select>
+    </div>
+    <div class="field">
+      <label>Fecha de vencimiento</label>
+      <input type="date" id="vFFecha">
+    </div>
+    <div class="field">
+      <label>Monto estimado</label>
+      <input type="number" id="vFMonto" step="0.01" placeholder="0.00">
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="btnEliminarVenc" style="color:var(--gasto);border-color:var(--gasto);">Eliminar</button>
+      <div class="spacer"></div>
+      <button class="btn ghost" id="btnCancelarVenc">Cancelar</button>
+      <button class="btn" id="btnGuardarVenc">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ==== CONFIGURACIÓN ====
 // Pegá acá la URL de tu Web App de Apps Script una vez desplegada (ver Code.gs)
@@ -323,7 +389,9 @@ let EDIT_ID = null;
 let TIPO_ACTUAL = 'Gasto';
 let VENCIMIENTOS = [];
 let CUOTAS = [];
-let CURRENT_VIEW = 'movimientos';
+let CURRENT_VIEW = 'resumen';
+let TIPO_VENC_ACTUAL = 'Gasto';
+let EDIT_VENC_ID = null;
 
 function fmtMoney(n){
   return '$ ' + Number(n||0).toLocaleString('es-AR', {minimumFractionDigits:0, maximumFractionDigits:0});
@@ -353,6 +421,73 @@ async function cargarTodo(){
   render();
   renderVencimientos();
   renderTarjetas();
+  renderResumen();
+}
+
+function renderResumen(){
+  const hoy = new Date();
+  const mesActual = hoy.getMonth() + 1;
+  const anioActual = hoy.getFullYear();
+
+  // saldo total (todos los movimientos)
+  let saldoTotal = 0, ingresosMes = 0, gastosMes = 0;
+  ALL_ITEMS.forEach(i => {
+    const signo = i.tipo === 'Ingreso' ? 1 : -1;
+    saldoTotal += signo * i.monto;
+    if (Number(i.mesNum) === mesActual && Number(i.anio) === anioActual) {
+      if (i.tipo === 'Ingreso') ingresosMes += i.monto;
+      else if (i.tipo === 'Gasto') gastosMes += i.monto;
+    }
+  });
+  document.getElementById('resSaldoTotal').textContent = fmtMoney(saldoTotal);
+  document.getElementById('resIngresosMes').textContent = fmtMoney(ingresosMes);
+  document.getElementById('resGastosMes').textContent = fmtMoney(gastosMes);
+  document.getElementById('resBalanceMes').textContent = fmtMoney(ingresosMes - gastosMes);
+
+  // próximos vencimientos pendientes (top 5 por fecha)
+  const pendientes = VENCIMIENTOS
+    .filter(v => v.estado !== 'Pagado')
+    .sort((a,b) => a.fechaVencimientoISO < b.fechaVencimientoISO ? -1 : 1)
+    .slice(0, 5);
+  const tbodyRV = document.getElementById('tbodyResumenVenc');
+  tbodyRV.innerHTML = '';
+  document.getElementById('emptyResumenVenc').style.display = pendientes.length ? 'none' : 'block';
+  pendientes.forEach(v => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="fecha" data-label="Vence">${v.fechaVencimiento}</td>
+      <td data-label="Concepto">${v.concepto}</td>
+      <td data-label="Cuenta">${v.cuenta}</td>
+      <td class="monto gasto" data-label="Monto est.">${fmtMoney(v.montoEstimado)}</td>
+      <td class="acciones" data-label="">
+        <button class="icon-btn" onclick="marcarPagado('${v.id}')" title="Marcar pagado">✓</button>
+      </td>`;
+    tbodyRV.appendChild(tr);
+  });
+
+  // tarjetas: pendiente total y cuotas del mes actual, por tarjeta
+  const porTarjeta = {};
+  CUOTAS.forEach(c => {
+    if (!porTarjeta[c.tarjeta]) porTarjeta[c.tarjeta] = { pendiente: 0, mesActual: 0 };
+    if (c.estado === 'Pendiente') porTarjeta[c.tarjeta].pendiente += c.importeCuota;
+    const fc = c.fechaVencimientoISO ? new Date(c.fechaVencimientoISO + 'T00:00:00') : null;
+    if (fc && fc.getMonth() + 1 === mesActual && fc.getFullYear() === anioActual) {
+      porTarjeta[c.tarjeta].mesActual += c.importeCuota;
+    }
+  });
+  const contTarjetas = document.getElementById('resumenTarjetas');
+  contTarjetas.innerHTML = '';
+  const entradas = Object.entries(porTarjeta);
+  document.getElementById('emptyResumenTarjetas').style.display = entradas.length ? 'none' : 'block';
+  entradas.sort((a,b) => b[1].pendiente - a[1].pendiente).forEach(([tarjeta, datos]) => {
+    contTarjetas.insertAdjacentHTML('beforeend', `
+      <div class="card bad">
+        <div class="k">${tarjeta}</div>
+        <div class="v">${fmtMoney(datos.pendiente)}</div>
+        <div class="k" style="margin-top:8px;">Cuotas este mes</div>
+        <div class="v" style="font-size:14px;">${fmtMoney(datos.mesActual)}</div>
+      </div>`);
+  });
 }
 
 function poblarFiltroTarjetas(){
@@ -365,6 +500,7 @@ function poblarFiltroTarjetas(){
 function cambiarVista(view){
   CURRENT_VIEW = view;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  document.getElementById('viewResumen').style.display = view === 'resumen' ? '' : 'none';
   document.getElementById('viewMovimientos').style.display = view === 'movimientos' ? '' : 'none';
   document.getElementById('viewVencimientos').style.display = view === 'vencimientos' ? '' : 'none';
   document.getElementById('viewTarjetas').style.display = view === 'tarjetas' ? '' : 'none';
@@ -390,6 +526,7 @@ function renderVencimientos(){
       <td class="monto gasto" data-label="Monto est.">${fmtMoney(v.montoEstimado)}</td>
       <td data-label="Estado"><span class="tag ${esPagado ? 'pagado':'pendiente'}">${v.estado}</span></td>
       <td class="acciones" data-label="">
+        <button class="icon-btn" onclick="abrirEdicionVenc('${v.id}')" title="Editar">✎</button>
         ${esPagado ? '' : `<button class="icon-btn" onclick="marcarPagado('${v.id}')" title="Marcar pagado">✓</button>`}
       </td>`;
     tbody.appendChild(tr);
@@ -457,6 +594,65 @@ function poblarFormSelects(){
     .filter(c => c.tipo === TIPO_ACTUAL || !c.tipo)
     .forEach(c => catSel.insertAdjacentHTML('beforeend', `<option value="${c.categoria}">${c.categoria}</option>`));
   META.cuentas.forEach(c => cueSel.insertAdjacentHTML('beforeend', `<option value="${c.cuenta}">${c.cuenta}</option>`));
+}
+
+function poblarFormSelectsVenc(){
+  const catSel = document.getElementById('vFCategoria');
+  const cueSel = document.getElementById('vFCuenta');
+  catSel.innerHTML = '';
+  cueSel.innerHTML = '';
+  META.categorias
+    .filter(c => c.tipo === TIPO_VENC_ACTUAL || !c.tipo)
+    .forEach(c => catSel.insertAdjacentHTML('beforeend', `<option value="${c.categoria}">${c.categoria}</option>`));
+  META.cuentas.forEach(c => cueSel.insertAdjacentHTML('beforeend', `<option value="${c.cuenta}">${c.cuenta}</option>`));
+}
+
+function setTipoVenc(tipo){
+  TIPO_VENC_ACTUAL = tipo;
+  document.getElementById('tipoVencIngreso').classList.toggle('active', tipo === 'Ingreso');
+  document.getElementById('tipoVencGasto').classList.toggle('active', tipo === 'Gasto');
+  poblarFormSelectsVenc();
+}
+
+window.abrirEdicionVenc = function(id){
+  const v = VENCIMIENTOS.find(x => x.id === id);
+  if (!v) return;
+  EDIT_VENC_ID = id;
+  setTipoVenc(v.tipo === 'Ingreso' ? 'Ingreso' : 'Gasto');
+  document.getElementById('vFConcepto').value = v.concepto;
+  document.getElementById('vFFecha').value = v.fechaVencimientoISO;
+  document.getElementById('vFMonto').value = v.montoEstimado;
+  document.getElementById('vFCategoria').value = v.categoria;
+  document.getElementById('vFCuenta').value = v.cuenta;
+  document.getElementById('modalBgVenc').classList.add('open');
+}
+
+function cerrarModalVenc(){
+  document.getElementById('modalBgVenc').classList.remove('open');
+}
+
+async function guardarVenc(){
+  if (!EDIT_VENC_ID) return;
+  const payload = {
+    id: EDIT_VENC_ID,
+    tipo: TIPO_VENC_ACTUAL,
+    concepto: document.getElementById('vFConcepto').value,
+    categoria: document.getElementById('vFCategoria').value,
+    cuenta: document.getElementById('vFCuenta').value,
+    fechaVencimiento: document.getElementById('vFFecha').value,
+    montoEstimado: document.getElementById('vFMonto').value
+  };
+  await api('updateVencimiento', payload);
+  cerrarModalVenc();
+  await cargarTodo();
+}
+
+async function eliminarVenc(){
+  if (!EDIT_VENC_ID) return;
+  if (!confirm('¿Eliminar este vencimiento?')) return;
+  await api('deleteVencimiento', {id: EDIT_VENC_ID});
+  cerrarModalVenc();
+  await cargarTodo();
 }
 
 function filtrados(){
@@ -603,6 +799,12 @@ document.getElementById('btnOrden').addEventListener('click', () => {
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => cambiarVista(btn.dataset.view));
 });
+document.getElementById('btnCancelarVenc').addEventListener('click', cerrarModalVenc);
+document.getElementById('btnGuardarVenc').addEventListener('click', guardarVenc);
+document.getElementById('btnEliminarVenc').addEventListener('click', eliminarVenc);
+document.getElementById('tipoVencIngreso').addEventListener('click', () => setTipoVenc('Ingreso'));
+document.getElementById('tipoVencGasto').addEventListener('click', () => setTipoVenc('Gasto'));
+document.getElementById('modalBgVenc').addEventListener('click', (e) => { if (e.target.id === 'modalBgVenc') cerrarModalVenc(); });
 document.getElementById('fSoloPendientes').addEventListener('change', renderVencimientos);
 document.getElementById('fTarjeta').addEventListener('change', renderTarjetas);
 document.getElementById('fSoloPendientesCuotas').addEventListener('change', renderTarjetas);
