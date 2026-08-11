@@ -402,7 +402,8 @@ async function api(action, params, opts){
   const url = new URL(WEBAPP_URL);
   url.searchParams.set('action', action);
   Object.entries(params||{}).forEach(([k,v]) => url.searchParams.set(k, v));
-  const res = await fetch(url.toString());
+  url.searchParams.set('_', Date.now()); // cache-busting: evita que el navegador reuse una respuesta vieja
+  const res = await fetch(url.toString(), { cache: 'no-store' });
   const data = await res.json();
   if (data && data.error){
     if (opts.silent) console.warn('Error en acción "' + action + '": ' + data.error);
